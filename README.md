@@ -24,7 +24,3 @@ A simple Pub/Sub implementation using Kafka and kafka-python.
 5. **Run producer (terminal 2):**
     ```bash
     python producer.py
-
-6. **Run multiple consumers:**
-    ```bash
-    python multi_consumer.py
