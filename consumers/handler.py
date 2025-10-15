@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import duckdb
 
-from topics import TOPICS
+from topics import SOURCE_TOPICS
 from .enum_models import TableNames, TableOperations
 from .queries import (
     ANALYTIC_QUERIES,

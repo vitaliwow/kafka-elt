@@ -1,6 +1,7 @@
 import json
 import logging
 import typing as t
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
@@ -9,8 +10,8 @@ from functools import cached_property
 import duckdb
 from confluent_kafka import Consumer, KafkaError, Message, TopicPartition
 
-from consumer.handler import HandleOlist
-from topics import TOPICS
+from consumers.handler import HandleOlist
+from topics import SOURCE_TOPICS, FACTS_TABLE_TOPICS
 
 # Configure logging
 logging.basicConfig(
@@ -74,7 +75,7 @@ class KafkaConsumer:
     def start_consuming(self, timeout=1.0):
         """Start consuming messages"""
         self.is_running = True
-        logger.info(f"🎧 Starting to consume messages by consumer {self.consumer_id}...")
+        logger.info(f"🎧 Starting to consume messages by consumers {self.consumer_id}...")
 
         try:
             while self.is_running:
@@ -100,7 +101,7 @@ class KafkaConsumer:
             self.close()
 
     def close(self):
-        """Close the consumer connection"""
+        """Close the consumers connection"""
         self.consumer.close()
         logger.info(f"🔴 Consumer {self.consumer_id} closed. Total messages processed: {self.message_count}")
 
@@ -142,16 +143,19 @@ def run(
         subscriber.start_consuming()
 
     except Exception as e:
-        logger.error(f"💥 Failed to start consumer: {e}")
+        logger.error(f"💥 Failed to start consumers: {e}")
 
 
-def partition_based_consumers(topics: list[str]) -> None:
+def partition_based_consumers(topics: list[str], process_partition_messages: Callable) -> None:
     """
-    Each consumer handles specific partitions for true parallelism
+    Each consumers handles specific partitions for true parallelism
     Using actual confluent_kafka Consumer class
     """
 
-    def create_partition_consumer(consumer_id, partitions):
+    def create_partition_consumer(
+        consumer_id,
+        partitions,
+    ):
         consumer = Consumer({
             'bootstrap.servers': 'localhost:29092',
             'group.id': 'partition-group',
@@ -169,41 +173,16 @@ def partition_based_consumers(topics: list[str]) -> None:
         return consumer
 
     try:
-        consumer1 = create_partition_consumer("consumer-1", [0, 5, 6])
-        consumer2 = create_partition_consumer("consumer-2", [1, 4, 7])
-        consumer3 = create_partition_consumer("consumer-3", [2, 3, 7])
-
-        def process_partition_messages(consumer, consumer_id):
-
-            with duckdb.connect("olist.db") as duck_conn:
-                try:
-                    while True:
-                        msg = consumer.poll(0.1)
-                        if msg is None:
-                            continue
-                        if msg.error():
-                            logger.error(f"Consumer error: {msg.error()}")
-                            continue
-
-                        values = json.loads(msg.value().decode('utf-8'))
-                        logger.info(f"⚡ [{consumer_id}] Partition {msg.partition()}: {values.get('id', 'N/A')}")
-
-                        # Example processing logic
-                        handler = HandleOlist(duck_conn)
-                        table_name = handler.create_src_table(msg.topic())
-                        handler.insert_row_into_table(table_name, values)
-
-                except Exception as e:
-                    logger.error(f"❌ [{consumer_id}] Error: {e}")
-                finally:
-                    consumer.close()
+        consumer1 = create_partition_consumer("consumers-1", [0, 5, 6])
+        consumer2 = create_partition_consumer("consumers-2", [1, 4, 7])
+        consumer3 = create_partition_consumer("consumers-3", [2, 3, 8])
 
         # Run partition consumers in parallel
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=3) as executor:
             futures = [
-                executor.submit(process_partition_messages, consumer1, "consumer-1"),
-                executor.submit(process_partition_messages, consumer2, "consumer-2"),
-                executor.submit(process_partition_messages, consumer3, "consumer-3"),
+                executor.submit(process_partition_messages, consumer1, "consumers-1"),
+                executor.submit(process_partition_messages, consumer2, "consumers-2"),
+                executor.submit(process_partition_messages, consumer3, "consumers-3"),
             ]
 
             try:
@@ -214,9 +193,3 @@ def partition_based_consumers(topics: list[str]) -> None:
 
     except Exception as e:
         logger.error(f"Failed to setup partition consumers: {e}")
-
-
-if __name__ == "__main__":
-    partition_based_consumers(
-        topics=TOPICS,
-    )
