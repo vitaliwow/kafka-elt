@@ -7,11 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
 
-import duckdb
 from confluent_kafka import Consumer, KafkaError, Message, TopicPartition
 
-from consumers.handler import HandleOlist
-from topics import SOURCE_TOPICS, FACTS_TABLE_TOPICS
 
 # Configure logging
 logging.basicConfig(
@@ -51,17 +48,6 @@ class KafkaConsumer:
         try:
             # Decode the message
             value = json.loads(message.value().decode('utf-8'))
-            key = message.key().decode('utf-8') if message.key() else None
-
-            logger.info(f"📨 Consumer ID {self.consumer_id}:")
-            logger.info(f"📨 Received message:")
-            logger.info(f"   Key: {key}")
-            logger.info(f"   Value: {value}")
-            logger.info(f"   Topic: {message.topic()}")
-            logger.info(f"   Partition: {message.partition()}")
-            logger.info(f"   Offset: {message.offset()}")
-            logger.info(f"   Timestamp: {datetime.fromtimestamp(message.timestamp()[1] / 1000)}")
-            logger.info("-" * 60)
 
             # Example processing logic
             if value.get('type') == 'ERROR':

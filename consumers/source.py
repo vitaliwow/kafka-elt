@@ -26,13 +26,22 @@ def process_source_tables(consumer, consumer_id):
                     logger.error(f"Consumer error: {msg.error()}")
                     continue
 
-                values = json.loads(msg.value().decode('utf-8'))
-                logger.info(f"⚡ [{consumer_id}] Partition {msg.partition()}: {values.get('id', 'N/A')}")
+                data = json.loads(msg.value().decode('utf-8'))
+                logger.info(f"⚡ [{consumer_id}] Partition {msg.partition()}")
 
                 # Example processing logic
                 handler = HandleOlist(duck_conn)
-                table_name = handler.create_src_table(msg.topic())
-                handler.insert_row_into_table(table_name, values)
+                facts_table_name = handler.create_facts_table()
+                data_field_values = data.get("data", {})
+                facts_data = {
+                    "order_id": data_field_values.get("order_id"),
+                    "order_item_id": data_field_values.get("order_item_id"),
+                    "product_id": data_field_values.get("product_id"),
+                    "seller_id": data_field_values.get("seller_id"),
+                    "customer_unique_id": data_field_values.get("customer_unique_id"),
+                    "price": data_field_values.get("price"),
+                }
+                handler.insert_row_into_table(facts_table_name, facts_data)
 
         except Exception as e:
             logger.error(f"❌ [{consumer_id}] Error: {e}")
@@ -43,6 +52,6 @@ def process_source_tables(consumer, consumer_id):
 if __name__ == "__main__":
     # create source tables
     partition_based_consumers(
-        topics=SOURCE_TOPICS,
+        topics=["olist_order_items_dataset", ],
         process_partition_messages=process_source_tables,
     )

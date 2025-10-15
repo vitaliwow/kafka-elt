@@ -4,7 +4,10 @@ from enum_models import TableNames, TableOperations
 FACTS_QUERIES = {
     TableNames.FACTS_ORDER_ITEMS: {
         TableOperations.CREATE: f"""
+            CREATE SEQUENCE IF NOT EXISTS seq_facts_id START 1;
+            
             CREATE TABLE IF NOT EXISTS {TableNames.FACTS_ORDER_ITEMS.value} (
+                id INTEGER PRIMARY KEY DEFAULT nextval('seq_facts_id'),
                 order_id VARCHAR(36),
                 order_item_id INT,
                 product_id VARCHAR(36),
