@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import random
 import time
 import typing as t
 from dataclasses import dataclass
@@ -9,6 +10,7 @@ from functools import cached_property
 import pandas as pd
 from confluent_kafka import Producer
 
+from topics import TOPICS
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +41,7 @@ class KafkaPublisher:
         topic: str,
         message: dict,
         key: str | None = None,
+        partition: int | None = None,
     ) -> bool:
         """Publish a message to the specified topic"""
         try:
@@ -50,6 +53,14 @@ class KafkaPublisher:
             self.producer.poll(0)
 
             # Asynchronously produce a message
+            payload = dict(
+                topic=topic,
+                value=message.encode('utf-8'),
+                key=str(key).encode('utf-8') if key else None,
+                callback=self.delivery_report
+            )
+            if partition is not None:
+                payload["partition"] = partition
             self.producer.produce(
                 topic=topic,
                 value=message.encode('utf-8'),
@@ -105,8 +116,7 @@ class KafkaPublisher:
 def stream_source_csv(
     bootstrap_servers: list[str],
     topics: list[str],
-    source_path: str,
-    chunk_size: int = 10,
+    chunk_size: int = 100000,
 ) -> None:
     try:
         publisher = KafkaPublisher(
@@ -116,29 +126,28 @@ def stream_source_csv(
 
         logger.info("🚀 Starting producer...")
 
-        for chunk_idx, chunk in enumerate(
-            pd.read_csv(
-                source_path,
-                chunksize=chunk_size,
-            )
-        ):
-            logger.info(f"Processing chunk {chunk_idx + 1} of file {source_path}")
 
-            for row_idx, row in chunk.iterrows():
-                source_key = os.path.basename(source_path)
 
-                message = {
-                    'timestamp': int(time.time() * 1000),
-                    'data': row.replace({pd.NaT: None}).to_dict(),
-                }
+        for topic in topics:
+            logger.info(f"🎯 Publishing to topic: {topic}")
+            for chunk_idx, chunk in enumerate(
+                    pd.read_csv(
+                        f"dataset/{topic}.csv",
+                        chunksize=chunk_size,
+                    )
+            ):
+                logger.info(f"Processing chunk {chunk_idx + 1} of file {topic}")
 
-                for topic in topics:
-                    logger.info(f"🎯 Publishing to topic: {topic}")
-
+                for row_idx, row in chunk.iterrows():
+                    message = {
+                        'timestamp': int(time.time() * 1000),
+                        'data': row.replace({pd.NaT: None}).to_dict(),
+                    }
                     publisher.publish_message(
                         topic=topic,
                         message=message,
-                        key=source_key,
+                        key=os.path.basename(topic),
+                        partition=random.randint(0, 2)
                     )
 
                     logger.info(f"Successfully published to topic: {topic}")
@@ -153,16 +162,7 @@ def stream_source_csv(
 
 if __name__ == "__main__":
 
-    for filename in [
-        "dataset/olist_customers_dataset.csv",
-        "dataset/olist_order_items_dataset.csv",
-        "dataset/olist_orders_dataset.csv",
-        "dataset/product_category_name_translation.csv",
-        "dataset/olist_sellers_dataset.csv",
-        "dataset/olist_geolocation_dataset.csv",
-    ]:
-        stream_source_csv(
-            bootstrap_servers=["localhost:29092", ],
-            topics=["source-csv", ],
-            source_path=filename,
-        )
+    stream_source_csv(
+        bootstrap_servers=["localhost:29092", ],
+        topics=TOPICS,
+    )

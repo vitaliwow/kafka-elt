@@ -1,6 +1,8 @@
 from confluent_kafka.admin import AdminClient, NewTopic
 import logging
 
+from topics import TOPICS
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -78,7 +80,7 @@ if __name__ == "__main__":
         admin = KafkaAdmin()
 
         # Create some example topics
-        topics_to_create = ["source-csv"]
+        topics_to_create = TOPICS
 
         for topic in topics_to_create:
             admin.create_topic(topic, num_partitions=3, replication_factor=1)
