@@ -5,7 +5,6 @@ import duckdb
 
 from consumers.base import partition_based_consumers
 from consumers.handler import HandleOlist
-from topics import SOURCE_TOPICS
 
 # Configure logging
 logging.basicConfig(
